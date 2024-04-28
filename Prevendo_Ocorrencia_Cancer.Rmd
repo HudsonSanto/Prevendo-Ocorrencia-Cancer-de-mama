@@ -1,0 +1,237 @@
+---
+title: "Prevendo Ocorrência Cancer"
+author: "Hudson Santos"
+date: "2024-04-28"
+output: html_document
+---
+
+```         
+```
+
+## Prevendo Ocorrencia Câncer de mama
+
+Os dados do câncer da mama incluem 569 observações de biópsias de câncer, cada um com 32 características (variáveis). Uma característica é um número de identificação (ID), outro é o diagnóstico de câncer, e 30 são medidas laboratoriais numéricas. O diagnóstico é codificado como "M" para indicar maligno ou "B" para indicar benigno.
+
+## Etapa 1 - Coletando Dados
+
+```{r pressure, echo=FALSE}
+#Coletando dados
+dados <- read.csv("bc_data.csv", stringsAsFactors = FALSE)
+View(dados)
+str(dados)
+```
+
+## Etapa 2 - Explorando os Dados
+
+```{r pressure, echo=FALSE}
+
+#Para evitar superajuste, sempre exclua a variável ID ao construir modelos de #aprendizado de máquina, pois o ID pode levar a previsões incorretas e dificultar a #generalização para novos dados
+dados <- dados[-1]
+str(dados)
+any(is.na(dados))
+```
+
+```{r pressure, echo=FALSE}
+#Algumas variaveis precisam ser reclassificadas para o tipo fator
+table(dados$diagnosis)
+dados$diagnosis <- factor(dados$diagnosis, levels = c("B", "M"), labels = c("Benigno", "Maligno"))
+str(dados$diagnosis)
+```
+
+```{r pressure, echo=FALSE}
+#Algumas variaveis precisam ser reclassificadas para o tipo fator
+table(dados$diagnosis)
+dados$diagnosis <- factor(dados$diagnosis, levels = c("B", "M"), labels = c("Benigno", "Maligno"))
+str(dados$diagnosis)
+```
+
+```{r pressure, echo=FALSE}
+#Verificando proporção
+round(prop.table(table(dados$diagnosis)) * 100, digits = 1) 
+```
+
+```{r pressure, echo=FALSE}
+#Em relação às medidas de tendência central, a detecção de um problema de escala #nos dados indica a necessidade de normalização. No kNN, a precisão do cálculo de #distância depende da escala dos dados de entrada 
+summary(dados[c("radius_mean", "area_mean", "smoothness_mean")])
+```
+
+```{r pressure, echo=FALSE}
+#Em relação às medidas de tendência central, a detecção de um problema de escala #nos dados indica a necessidade de normalização. No kNN, a precisão do cálculo de #distância depende da escala dos dados de entrada 
+summary(dados[c("radius_mean", "area_mean", "smoothness_mean")])
+```
+
+```{r pressure, echo=FALSE}
+# Criando um função de normalização
+normalizar <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+```{r pressure, echo=FALSE}
+# Testando a função de normalização - os resultados devem ser idênticos
+normalizar(c(1, 2, 3, 4, 5))
+normalizar(c(10, 20, 30, 40, 50))
+```
+
+```{r pressure, echo=FALSE}
+# Normalizando os dados
+dados_norm <- as.data.frame(lapply(dados[2:31], normalizar))
+```
+
+```{r pressure, echo=FALSE}
+# Confirmando se a normalização funcionou
+summary(dados[c("radius_mean", "area_mean", "smoothness_mean")])
+summary(dados_norm[c("radius_mean", "area_mean", "smoothness_mean")])
+```
+
+## Etapa 3: Treinando o modelo
+
+```{r pressure, echo=FALSE}
+
+
+# Carregando o pacote library
+install.packages("class")
+library(class)
+```
+
+```{r pressure, echo=FALSE}
+# Criando dados de treino e dados de teste
+dados_treino <- dados_norm[1:469, ]
+dados_teste <- dados_norm[470:569, ]
+
+# Criando os labels para os dados de treino e de teste
+dados_treino_labels <- dados[1:469, 1]
+dados_teste_labels <- dados[470:569, 1]
+length(dados_treino_labels)
+length(dados_teste_labels)
+```
+
+```{r pressure, echo=FALSE}
+# Criando o modelo
+#A função knn() gera previsões para cada exemplo no conjunto de teste, #apresentando os resultados em um objeto de fator
+modelo <- knn(train = dados_treino, 
+              test = dados_teste,
+              cl = dados_treino_labels, 
+              k = 21)
+```
+
+## Etapa 4: Avaliando e Interpretando o Modelo
+
+```{r pressure, echo=FALSE}
+# Carregando o gmodels
+install.packages("gmodels")
+library(gmodels)
+
+# Criando uma tabela cruzada dos dados previstos x dados atuais
+# Usaremos amostra com 100 observações: length(dados_teste_labels)
+CrossTable(x = dados_teste_labels, y = modelo, prop.chisq = FALSE)
+```
+
+A tabela de confusão apresenta quatro cenários: verdadeiro positivo, verdadeiro negativo, falso positivo e falso negativo. Ela compara as previsões do modelo com os dados observados. Por exemplo, 'verdadeiro negativo' significa que o modelo previu corretamente a ausência da doença, enquanto os dados confirmaram isso. A taxa de acerto do modelo é de 98%, indicando que acertou 98 de 100 casos. Os erros do modelo são classificados como falso positivo (Erro Tipo I) e falso negativo (Erro Tipo II).
+
+## Etapa 5: Otimizando a performance do modelo
+
+```{r pressure, echo=FALSE}
+# Usando a função scale() para padronizar o z-score 
+?scale()
+dados_z <- as.data.frame(scale(dados[-1]))
+
+# Confirmando transformação realizada com sucesso
+summary(dados_z$area_mean)
+```
+
+```{r pressure, echo=FALSE}
+# Criando novos datasets de treino e de teste
+dados_treino <- dados_z[1:469, ]
+dados_teste <- dados_z[470:569, ]
+
+dados_treino_labels <- dados[ 1: 469, 1] 
+dados_teste_labels <- dados[ 470: 569, 1]
+
+# Reclassificando
+modelo_v2 <- knn(train = dados_treino, 
+                 test = dados_teste,
+                 cl = dados_treino_labels, 
+                 k = 21)
+```
+
+```{r pressure, echo=FALSE}
+# Criando uma tabela cruzada dos dados previstos x dados atuais
+CrossTable(x = dados_teste_labels, y = modelo_v2, prop.chisq = FALSE)
+```
+
+```{r pressure, echo=FALSE}
+# Testando diferentes valores para k
+# Criando dados de treino e dados de teste
+dados_treino <- dados_norm[1:469, ]
+dados_teste <- dados_norm[470:569, ]
+
+# Criando os labels para os dados de treino e de teste
+dados_treino_labels <- dados[1:469, 1]
+dados_teste_labels <- dados[470:569, 1]
+```
+
+```{r pressure, echo=FALSE}
+# Valores diferentes para k
+modelo_v3 <- knn(train = dados_treino, 
+                 test = dados_teste, 
+                 cl = dados_treino_labels, 
+                 k = 1)
+CrossTable(x = dados_teste_labels, y = modelo_v3, prop.chisq = FALSE)
+
+modelo_v4 <- knn(train = dados_treino, 
+                 test = dados_teste, 
+                 cl = dados_treino_labels, 
+                 k = 5)
+CrossTable(x = dados_teste_labels, y = modelo_v4, prop.chisq = FALSE)
+
+modelo_v5 <- knn(train = dados_treino, 
+                 test = dados_teste, 
+                 cl = dados_treino_labels, 
+                 k = 11)
+CrossTable(x = dados_teste_labels, y = modelo_v5, prop.chisq=FALSE)
+
+modelo_v6 <- knn(train = dados_treino, 
+                 test = dados_teste, 
+                 cl = dados_treino_labels, 
+                 k = 15)
+CrossTable(x = dados_teste_labels, y = modelo_v6, prop.chisq = FALSE)
+
+modelo_v7 <- knn(train = dados_treino, 
+                 test = dados_teste, 
+                 cl = dados_treino_labels, 
+                 k = 27)
+CrossTable(x = dados_teste_labels, y = modelo_v7, prop.chisq = FALSE)
+
+modelo_v2 <- knn(train = dados_treino, 
+                 test = dados_teste,
+                 cl = dados_treino_labels, 
+                 k = 21)
+CrossTable(x = dados_teste_labels, y = modelo_v2, prop.chisq = FALSE)
+```
+
+```{r pressure, echo=FALSE}
+## Calculando a taxa de erro
+prev = NULL
+taxa_erro = NULL
+
+suppressWarnings(
+for(i in 1:20){
+  set.seed(101)
+  prev = knn(train = dados_treino, test = dados_teste, cl = dados_treino_labels, k = i)
+  taxa_erro[i] = mean(dados$diagnosis != prev)
+})
+```
+
+```{r pressure, echo=FALSE}
+# Obtendo os valores de k e das taxas de erro
+library(ggplot2)
+k.values <- 1:20
+df_erro <- data.frame(taxa_erro, k.values)
+df_erro
+```
+
+```{r pressure, echo=FALSE}
+# À medida que aumentamos k, diminuímos a taxa de erro do modelo
+ggplot(df_erro, aes(x = k.values, y = taxa_erro)) + geom_point()+ geom_line(lty = "dotted", color = 'red')
+```
